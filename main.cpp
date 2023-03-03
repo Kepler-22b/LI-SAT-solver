@@ -1,150 +1,233 @@
 #include <iostream>
-#include <stdlib.h>
+#include <cstdlib>
 #include <algorithm>
 #include <vector>
+#include <cstdint>
 using namespace std;
 
-#define UNDEF -1
-#define TRUE 1
-#define FALSE 0
+class Lit;
 
-uint numVars;
-uint numClauses;
-vector<vector<int>> clauses;
-vector<int> model;
-vector<int> modelStack;
+typedef vector<Lit> Clause;
+typedef vector<Clause> PModel;
+typedef uint32_t LID;
+
+enum LST : int8_t {
+    FALSE = -1,
+    UNDEF = 0,
+    TRUE = 1
+};
+
+char stateToSymbol(LST);
+
+class Lit {
+
+private:
+
+    LID id;
+    LST st;
+
+public:
+
+    Lit(LID id, LST st) : id(id), st(st) {}
+
+    [[nodiscard]] LST state() const {
+
+        return st;
+    }
+
+    [[nodiscard]] LID getId() const {
+
+        return id;
+    }
+
+    Lit reversed() {
+
+        return {id, (LST)(-st)};
+    }
+};
+
+
+uint64_t numClauses;
+uint64_t numVars;
+
+PModel clauses;
+vector<LID> model;
+vector<Lit> modelStack;
+
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
+
+void setLitTrue(Lit l) {
+
+    modelStack.push_back(l);
+
+    model[l.getId()] = l.state();
+}
+
+void setLitTrue(LID id, LST st) {
+
+    modelStack.emplace_back(id, st);
+
+    model[id] = st;
+}
+
+LST currentModelValue(Lit l) {
+
+    if (model[l.getId()] == UNDEF)
+        return UNDEF;
+
+    if (model[l.getId()] == l.state())
+        return TRUE;
+
+    return FALSE;
+}
+
+bool someLitTrue(Clause& c) {
+
+    bool (*g)(Lit) = [](Lit l) -> bool {
+        return currentModelValue(l) == TRUE;
+    };
+
+    return any_of(c.begin(), c.end(), g);
+}
 
 void readInput();
 
 void unitClauses();
 
-int currentValueInModel(int lit) {
+void checkModel();
 
-    if (lit >= 0)
-        return model[lit];
-    else if (model[-lit] == UNDEF)
-        return UNDEF;
-    else
-        return 1 - model[-lit];
-}
+bool propagateGivesConflict () {
 
-
-void setLiteralToTrue(int lit) {
-
-    modelStack.push_back(lit);
-
-    if (lit > 0)
-        model[lit] = TRUE;
-    else
-        model[-lit] = FALSE;
-}
-
-
-bool propagateGivesConflict ( ) {
     while ( indexOfNextLitToPropagate < modelStack.size() ) {
+
         ++indexOfNextLitToPropagate;
-        for (uint i = 0; i < numClauses; ++i) {
-            bool someLitTrue = false;
+
+        for (const Clause& c: clauses) {
+
             int numUndefs = 0;
-            int lastLitUndef = 0;
-            for (uint k = 0; not someLitTrue and k < clauses[i].size(); ++k){
-                int val = currentValueInModel(clauses[i][k]);
-                if (val == TRUE) someLitTrue = true;
-                else if (val == UNDEF){ ++numUndefs; lastLitUndef = clauses[i][k]; }
-            }
-            if (not someLitTrue and numUndefs == 0) return true; // conflict! all lits false
-            else if (not someLitTrue and numUndefs == 1) setLiteralToTrue(lastLitUndef);
+
+            Lit lastLitUndef = Lit(0, UNDEF);
+
+            for (Lit l: c)
+                switch (currentModelValue(l)) {
+                    case FALSE:
+                    break;
+                    case UNDEF:
+                        ++numUndefs;
+                        lastLitUndef = l;
+                    break;
+                    case TRUE:
+                        goto cont;
+                }
+
+            if (numUndefs == 0)
+                return true; // conflict! all lits false
+            else if (numUndefs == 1)
+                setLitTrue(lastLitUndef);
+
+            cont: continue;
         }
     }
+
     return false;
 }
 
-
 void backtrack(){
+
     uint i = modelStack.size() -1;
-    int lit = 0;
-    while (modelStack[i] != 0){ // 0 is the DL mark
-        lit = modelStack[i];
-        model[abs(lit)] = UNDEF;
+
+    Lit l = Lit(0, UNDEF);
+
+    while (modelStack[i].getId() != 0) { // 0 is the DL mark
+
+        l = modelStack[i];
+        model[l.getId()] = UNDEF;
         modelStack.pop_back();
         --i;
     }
+
     // at this point, lit is the last decision
     modelStack.pop_back(); // remove the DL mark
     --decisionLevel;
     indexOfNextLitToPropagate = modelStack.size();
-    setLiteralToTrue(-lit);  // reverse last decision
+    setLitTrue(l.reversed());  // reverse last decision
 }
 
 
 // Heuristic for finding the next decision literal:
-int getNextDecisionLiteral(){
-    for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
-        if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
-    return 0; // reurns 0 when all literals are defined
-}
+LID getNextDecisionLiteral(){
 
-void checkmodel(){
-    for (uint i = 0; i < numClauses; ++i){
-        bool someTrue = false;
-        for (uint j = 0; not someTrue and j < clauses[i].size(); ++j)
-            someTrue = (currentValueInModel(clauses[i][j]) == TRUE);
-        if (not someTrue) {
-            cout << "Error in model, clause is not satisfied:";
-            for (uint j = 0; j < clauses[i].size(); ++j) cout << clauses[i][j] << " ";
-            cout << endl;
-            exit(1);
-        }
-    }
+    for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
+        if (model[i] == UNDEF)
+            return i;  // returns first UNDEF var, positively
+
+    return 0; // reurns 0 when all literals are defined
 }
 
 int main(){
 
     readInput(); // reads numVars, numClauses and clauses
 
-    model.resize(numVars+1,UNDEF);
+    model.resize(numVars + 1,UNDEF);
     indexOfNextLitToPropagate = 0;
     decisionLevel = 0;
 
     unitClauses();
 
-
     // DPLL algorithm
     while (true) {
+
         while ( propagateGivesConflict() ) {
-            if ( decisionLevel == 0) { cout << "UNSATISFIABLE" << endl; return 10; }
+
+            if ( decisionLevel == 0) {
+
+                cout << "UNSATISFIABLE" << endl;
+                exit(10);
+            }
+
             backtrack();
         }
-        int decisionLit = getNextDecisionLiteral();
-        if (decisionLit == 0) { checkmodel(); cout << "SATISFIABLE" << endl; return 20; }
+
+        uint decisionLit = getNextDecisionLiteral();
+
+        if (decisionLit == 0) {
+
+            checkModel();
+            cout << "SATISFIABLE" << endl;
+            exit(20);
+        }
+
         // start new decision level:
-        modelStack.push_back(0);  // push mark indicating new DL
+        modelStack.emplace_back(0, UNDEF);  // push mark indicating new DL
         ++indexOfNextLitToPropagate;
         ++decisionLevel;
-        setLiteralToTrue(decisionLit);    // now push decisionLit on top of the mark
+        setLitTrue(decisionLit, TRUE);    // now push decisionLit on top of the mark
     }
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////
 
 void unitClauses() {
 
     // Take care of initial unit clauses, if any
-    for (vector<int>& clause: clauses) {
+    for (Clause& c: clauses) {
 
-        if (clause.size() != 1)
+        if (c.size() != 1)
             continue;
 
-        int lit = clause[0];
-        int val = currentValueInModel(lit);
+        switch (currentModelValue(c[0])) {
 
-        if (val == FALSE) {
-
-            cout << "UNSATISFIABLE" << endl;
-            exit(10);
-
-        } else if (val == UNDEF)
-            setLiteralToTrue(lit);
+            case FALSE:
+                cout << "UNSATISFIABLE" << endl;
+                exit(10);
+            case UNDEF:
+                setLitTrue(c[0]);
+            break;
+            case TRUE:
+            break;
+        }
     }
 }
 
@@ -164,15 +247,52 @@ void readInput() {
     // Read "cnf numVars numClauses"
     string aux;
     cin >> aux >> numVars >> numClauses;
+
     clauses.resize(numClauses);
 
     // Read clauses
-
     for (uint i = 0; i < numClauses; ++i) {
 
         int lit;
 
-        while (cin >> lit and lit != 0)
-            clauses[i].push_back(lit);
+        while (cin >> lit and lit != 0) {
+
+            if (lit > 0)
+                clauses[i].emplace_back(lit, TRUE);
+            else
+                clauses[i].emplace_back(-lit, FALSE);
+        }
     }
+}
+
+char stateToSymbol(LST st) {
+
+    switch (st) {
+        case FALSE:
+            return '-';
+        case TRUE:
+            return '+';
+        case UNDEF:
+            return ' ';
+        default:
+            return '?';
+    }
+}
+
+void printErrorTerm(const Clause& c) {
+
+    cout << "Error in model, clause is not satisfied:";
+
+    for (Lit l: c)
+        cout << "[" << stateToSymbol(l.state()) << "]" << l.getId() << " ";
+
+    cout << endl;
+    exit(1);
+}
+
+void checkModel() {
+
+    for (Clause& c: clauses)
+        if (not someLitTrue(c))
+            printErrorTerm(c);
 }
