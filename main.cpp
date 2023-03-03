@@ -9,7 +9,7 @@ class Lit;
 
 typedef vector<Lit> Clause;
 typedef vector<Clause> PModel;
-typedef uint32_t LID;
+typedef uint16_t LID;
 
 enum LST : int8_t {
     FALSE = -1,
@@ -40,9 +40,9 @@ public:
         return id;
     }
 
-    Lit reversed() {
+    void reverse() {
 
-        return {id, (LST)(-st)};
+        st = (LST)(-st);
     }
 };
 
@@ -51,11 +51,11 @@ uint64_t numClauses;
 uint64_t numVars;
 
 PModel clauses;
-vector<LID> model;
+vector<LST> model;
 vector<Lit> modelStack;
 
-uint indexOfNextLitToPropagate;
-uint decisionLevel;
+uint nextIndex;
+uint level;
 
 void setLitTrue(Lit l) {
 
@@ -84,12 +84,14 @@ LST currentModelValue(Lit l) {
 
 bool someLitTrue(Clause& c) {
 
-    bool (*g)(Lit) = [](Lit l) -> bool {
+    return any_of(c.begin(), c.end(), [](Lit l) -> bool {
         return currentModelValue(l) == TRUE;
-    };
-
-    return any_of(c.begin(), c.end(), g);
+    });
 }
+
+int printSat();
+
+int printNotSat();
 
 void readInput();
 
@@ -97,37 +99,43 @@ void unitClauses();
 
 void checkModel();
 
+bool clauseConflict(const Clause& c) {
+
+    int num = 0;
+
+    Lit lastLitUndef = Lit(0, UNDEF);
+
+    for (Lit l: c)
+        switch (currentModelValue(l)) {
+            case FALSE:
+                break;
+            case UNDEF:
+                ++num;
+                lastLitUndef = l;
+                break;
+            case TRUE:
+                return false;
+        }
+
+    switch (num) {
+        case 0:
+            return true;
+        case 1:
+            setLitTrue(lastLitUndef);
+        default:
+            return false;
+    }
+}
+
 bool propagateGivesConflict () {
 
-    while ( indexOfNextLitToPropagate < modelStack.size() ) {
+    while (nextIndex < modelStack.size() ) {
 
-        ++indexOfNextLitToPropagate;
+        ++nextIndex;
 
-        for (const Clause& c: clauses) {
-
-            int numUndefs = 0;
-
-            Lit lastLitUndef = Lit(0, UNDEF);
-
-            for (Lit l: c)
-                switch (currentModelValue(l)) {
-                    case FALSE:
-                    break;
-                    case UNDEF:
-                        ++numUndefs;
-                        lastLitUndef = l;
-                    break;
-                    case TRUE:
-                        goto cont;
-                }
-
-            if (numUndefs == 0)
-                return true; // conflict! all lits false
-            else if (numUndefs == 1)
-                setLitTrue(lastLitUndef);
-
-            cont: continue;
-        }
+        for (const Clause& c: clauses)
+            if (clauseConflict(c))
+                return true;
     }
 
     return false;
@@ -135,74 +143,73 @@ bool propagateGivesConflict () {
 
 void backtrack(){
 
-    uint i = modelStack.size() -1;
-
     Lit l = Lit(0, UNDEF);
 
-    while (modelStack[i].getId() != 0) { // 0 is the DL mark
+    for (auto it = modelStack.rbegin();
+        it != modelStack.rend();
+        ++it, modelStack.pop_back()
+    ) {
 
-        l = modelStack[i];
+        if (it->getId() == 0)
+            break;
+
+        l = *it;
         model[l.getId()] = UNDEF;
-        modelStack.pop_back();
-        --i;
     }
 
     // at this point, lit is the last decision
-    modelStack.pop_back(); // remove the DL mark
-    --decisionLevel;
-    indexOfNextLitToPropagate = modelStack.size();
-    setLitTrue(l.reversed());  // reverse last decision
+    modelStack.pop_back();
+    --level;
+    nextIndex = modelStack.size();
+
+    l.reverse();
+    setLitTrue(l);
 }
 
 
 // Heuristic for finding the next decision literal:
-LID getNextDecisionLiteral(){
+LID nextDecision() {
 
-    for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
+    for (uint i = 1; i <= numVars; ++i)
         if (model[i] == UNDEF)
-            return i;  // returns first UNDEF var, positively
+            return i;
 
-    return 0; // reurns 0 when all literals are defined
+    checkModel();
+    exit(printSat());
+}
+
+void makeDecision() {
+
+    LID id = nextDecision();
+
+    modelStack.emplace_back(0, UNDEF);
+    ++nextIndex;
+    ++level;
+    setLitTrue(id, TRUE);
 }
 
 int main(){
 
-    readInput(); // reads numVars, numClauses and clauses
+    readInput();
 
     model.resize(numVars + 1,UNDEF);
-    indexOfNextLitToPropagate = 0;
-    decisionLevel = 0;
+
+    nextIndex = 0;
+    level = 0;
 
     unitClauses();
 
-    // DPLL algorithm
     while (true) {
 
-        while ( propagateGivesConflict() ) {
+        while (propagateGivesConflict()) {
 
-            if ( decisionLevel == 0) {
-
-                cout << "UNSATISFIABLE" << endl;
-                exit(10);
-            }
+            if (level == 0)
+                exit(printNotSat());
 
             backtrack();
         }
 
-        uint decisionLit = getNextDecisionLiteral();
-
-        if (decisionLit == 0) {
-
-            checkModel();
-            cout << "SATISFIABLE" << endl;
-            exit(20);
-        }
-
-        // start new decision level:
-        modelStack.emplace_back(0, UNDEF);  // push mark indicating new DL
-        ++indexOfNextLitToPropagate;
-        ++decisionLevel;
-        setLitTrue(decisionLit, TRUE);    // now push decisionLit on top of the mark
+        makeDecision();
     }
 }
 
@@ -224,9 +231,9 @@ void unitClauses() {
                 exit(10);
             case UNDEF:
                 setLitTrue(c[0]);
-            break;
+                break;
             case TRUE:
-            break;
+                break;
         }
     }
 }
@@ -295,4 +302,16 @@ void checkModel() {
     for (Clause& c: clauses)
         if (not someLitTrue(c))
             printErrorTerm(c);
+}
+
+int printSat() {
+
+    cout << "SATISFIABLE" << endl;
+    return 20;
+}
+
+int printNotSat() {
+
+    cout << "UNSATISFIABLE" << endl;
+    return 10;
 }
