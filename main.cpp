@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <cstdint>
+#include <cmath>
 using namespace std;
 
 enum LST : int8_t;
@@ -50,6 +51,8 @@ vector<Lit> modelStack;
 
 vector<vector<Clause*>> cLitTrue;
 vector<vector<Clause*>> cLitFalse;
+
+vector<LID> lRank;
 
 uint nextIndex;
 uint level;
@@ -100,10 +103,16 @@ bool propagateGivesConflict () {
 }
 
 LID nextDecision() {
+/*
+    for (LID id: lRank)
+        if (model[id] == UNDEF)
+            return id;*/
 
     for (uint i = 1; i <= numVars; ++i)
         if (model[i] == UNDEF)
             return i;
+
+    //no UNDEF lit found: terminate program
 
     checkModel();
     exit(printSat());
@@ -139,6 +148,31 @@ void initClauseIndex() {
             }
 }
 
+void compPriority() {
+
+    vector<double> value = vector<double>(numVars + 1, 0);
+
+    double i = 1;
+
+    for (const Clause& c: clauses) {
+
+        for (const Lit& l: c)
+            value[l.getId()] += sqrt(i);
+
+        ++i;
+    }
+
+    lRank.resize(numVars);
+
+    for (LID n = 0; n < lRank.size(); ++n)
+        lRank[n] = n + 1;
+
+    std::sort(lRank.begin(), lRank.end(), [&value] (LID i0, LID i1) -> bool {
+
+        return value[i0] < value[i1];
+    });
+}
+
 int main(){
 
     readInput();
@@ -147,6 +181,8 @@ int main(){
 
     nextIndex = 0;
     level = 0;
+
+    compPriority();
 
     initClauseIndex();
 
@@ -180,8 +216,7 @@ void unitClauses() {
         switch (currentModelValue(c[0])) {
 
             case FALSE:
-                cout << "UNSATISFIABLE" << endl;
-                exit(10);
+                exit(printNotSat());
             case UNDEF:
                 setLit(c[0]);
                 break;
