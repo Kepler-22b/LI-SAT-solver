@@ -152,14 +152,14 @@ void compPriority() {
 
     vector<double> value = vector<double>(numVars + 1, 0);
 
-    double i = 1;
+    auto i = (double)numVars;
 
     for (const Clause& c: clauses) {
 
         for (const Lit& l: c)
-            value[l.getId()] += sqrt(i);
+            value[l.getId()] += i;
 
-        ++i;
+        --i;
     }
 
     lRank.resize(numVars);
@@ -167,7 +167,7 @@ void compPriority() {
     for (LID n = 0; n < lRank.size(); ++n)
         lRank[n] = n + 1;
 
-    std::sort(lRank.begin(), lRank.end(), [&value] (LID i0, LID i1) -> bool {
+    std::sort(lRank.rbegin(), lRank.rend(), [&value] (LID i0, LID i1) -> bool {
 
         return value[i0] < value[i1];
     });
