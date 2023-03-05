@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <cmath>
+
 using namespace std;
 
 enum LST : int8_t;
@@ -18,17 +19,17 @@ private:
 
 public:
 
-    Lit(LID id, LST st) : id(id), st(st) {}
+    inline Lit(LID id, LST st) : id(id), st(st) {}
 
-    [[nodiscard]] LST state() const {
+    [[nodiscard]] inline LST state() const {
         return st;
     }
 
-    [[nodiscard]] LID getId() const {
+    [[nodiscard]] inline LID getId() const {
         return id;
     }
 
-    void reverse() {
+    inline void reverse() {
         st = (LST)(-st);
     }
 };
@@ -56,6 +57,8 @@ vector<LID> lRank;
 
 uint nextIndex;
 uint level;
+
+uint64_t back = 0;
 
 void setLit(Lit);
 
@@ -88,14 +91,14 @@ bool propagateGivesConflict () {
                 for (Clause* c: cLitTrue[l.getId()])
                     if (clauseConflict(*c))
                         return true;
-            break;
+                break;
             case UNDEF:
-            break;
+                break;
             case TRUE:
                 for (Clause* c: cLitFalse[l.getId()])
                     if (clauseConflict(*c))
                         return true;
-            break;
+                break;
         }
     }
 
@@ -103,14 +106,10 @@ bool propagateGivesConflict () {
 }
 
 LID nextDecision() {
-/*
+
     for (LID id: lRank)
         if (model[id] == UNDEF)
-            return id;*/
-
-    for (uint i = 1; i <= numVars; ++i)
-        if (model[i] == UNDEF)
-            return i;
+            return id;
 
     //no UNDEF lit found: terminate program
 
@@ -125,7 +124,8 @@ void makeDecision() {
     modelStack.emplace_back(0, UNDEF);
     ++nextIndex;
     ++level;
-    setLit(id, TRUE);
+
+    setLit(id, FALSE);
 }
 
 void initClauseIndex() {
@@ -139,35 +139,38 @@ void initClauseIndex() {
 
                 case FALSE:
                     cLitFalse[l.getId()].push_back(&c);
-                break;
+                    break;
                 case UNDEF:
-                break;
+                    break;
                 case TRUE:
                     cLitTrue[l.getId()].push_back(&c);
-                break;
+                    break;
             }
 }
 
+vector<double> value;
+
 void compPriority() {
 
-    vector<double> value = vector<double>(numVars + 1, 0);
+    fill(value.begin(), value.end(), 0);
 
-    auto i = (double)numVars;
+    auto i = (double)numClauses;
 
     for (const Clause& c: clauses) {
 
         for (const Lit& l: c)
-            value[l.getId()] += i;
+            value[l.getId()] += log2(i);
+
+        for (const Lit& l: c)
+            value[l.getId()] *= 10;
 
         --i;
     }
 
-    lRank.resize(numVars);
-
-    for (LID n = 0; n < lRank.size(); ++n)
+    for (LID n = 0; n < (LID)lRank.size(); ++n)
         lRank[n] = n + 1;
 
-    std::sort(lRank.rbegin(), lRank.rend(), [&value] (LID i0, LID i1) -> bool {
+    std::sort(lRank.rbegin(), lRank.rend(), [] (LID i0, LID i1) -> bool {
 
         return value[i0] < value[i1];
     });
@@ -182,11 +185,17 @@ int main(){
     nextIndex = 0;
     level = 0;
 
-    compPriority();
+    lRank.resize(numVars);
+
+    value.resize(numVars + 1);
+    //lvl.resize(numVars + 1);
+    //comp.resize(numVars + 1);
 
     initClauseIndex();
 
     unitClauses();
+
+    compPriority();
 
     while (true) {
 
@@ -301,13 +310,13 @@ void checkModel() {
 
 int printSat() {
 
-    cout << "SATISFIABLE" << endl;
+    cout << "SATISFIABLE" << ' ' << back << endl;
     return 20;
 }
 
 int printNotSat() {
 
-    cout << "UNSATISFIABLE" << endl;
+    cout << "UNSATISFIABLE" << ' ' << back << endl;
     return 10;
 }
 
@@ -344,9 +353,9 @@ void backtrack() {
 
     l.reverse();
     setLit(l);
+
+    ++back;
 }
-
-
 
 void setLit(Lit l) {
 
@@ -364,7 +373,7 @@ void setLit(LID id, LST st) {
 
 bool clauseConflict(const Clause& c) {
 
-    int num = 0;
+    bool one = false;
 
     Lit lastLitUndef = Lit(0, UNDEF);
 
@@ -373,19 +382,20 @@ bool clauseConflict(const Clause& c) {
             case FALSE:
                 break;
             case UNDEF:
-                ++num;
+
+                if (one)
+                    return false;
+                one = true;
+
                 lastLitUndef = l;
                 break;
             case TRUE:
                 return false;
         }
 
-    switch (num) {
-        case 0:
-            return true;
-        case 1:
-            setLit(lastLitUndef);
-        default:
-            return false;
-    }
+    if (not one)
+        return true;
+
+    setLit(lastLitUndef);
+    return false;
 }
