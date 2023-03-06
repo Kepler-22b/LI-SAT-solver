@@ -53,7 +53,8 @@ vector<Lit> modelStack;
 vector<vector<uint64_t>> cLitTrue;
 vector<vector<uint64_t>> cLitFalse;
 
-vector<LID> lRank;
+vector<double> value;
+//vector<LID> lRank;
 
 uint nextIndex;
 uint level;
@@ -65,6 +66,8 @@ void setLit(Lit);
 void setLit(LID, LST);
 
 LST currentModelValue(Lit);
+
+char stateToSymbol(LST);
 
 int printSat();
 
@@ -107,9 +110,38 @@ bool propagateGivesConflict () {
 
 LID nextDecision() {
 
-    for (LID id: lRank)
-        if (model[id] == UNDEF)
-            return id;
+    uint8_t count = 0;
+
+    LID ret    = 0;
+    double val = 0;
+
+    for (const Clause &c: clauses) {
+
+        if (any_of(c.begin(), c.end(), [] (const Lit& l) -> bool {
+            return model[l.getId()] == l.state();
+        })) continue;
+
+        for (const Lit &l: c)
+            if (model[l.getId()] == UNDEF && value[l.getId()] > val) {
+
+                ret = l.getId();
+                val = value[l.getId()];
+
+                ++count;
+
+                if (count > 5)
+                    return ret;
+            }
+
+        if (count != 0)
+            continue;
+
+        cout << "Unexpected error" << endl;
+        exit(-3);
+    }
+
+    if (count != 0)
+        return ret;
 
     //no UNDEF lit found: terminate program
 
@@ -148,32 +180,34 @@ void initClauseIndex() {
             }
 }
 
-vector<double> value;
-
 void compPriority() {
 
-    fill(value.begin(), value.end(), 0);
+    fill(value.begin(), value.end(), 1);
 
     auto i = (double)numClauses;
 
     for (const Clause& c: clauses) {
 
+        for (const Lit &l: c)
+            value[l.getId()] *= log2(i);
+/*
         for (const Lit& l: c)
-            value[l.getId()] += log2(i);
-
-        for (const Lit& l: c)
-            value[l.getId()] *= 10;
+            value[l.getId()] *= 10;*/
 
         --i;
     }
-
+/*
+    for (const Clause& c: clauses)
+        for (const Lit &l: c)
+            cout << value[l.getId()] << endl;*/
+/*
     for (LID n = 0; n < (LID)lRank.size(); ++n)
         lRank[n] = n + 1;
 
     std::sort(lRank.rbegin(), lRank.rend(), [] (LID i0, LID i1) -> bool {
 
         return value[i0] < value[i1];
-    });
+    });*/
 }
 
 int main(){
@@ -185,11 +219,7 @@ int main(){
     nextIndex = 0;
     level = 0;
 
-    lRank.resize(numVars);
-
     value.resize(numVars + 1);
-    //lvl.resize(numVars + 1);
-    //comp.resize(numVars + 1);
 
     initClauseIndex();
 
