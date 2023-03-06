@@ -50,8 +50,8 @@ Problem clauses;
 vector<LST> model;
 vector<Lit> modelStack;
 
-vector<vector<Clause*>> cLitTrue;
-vector<vector<Clause*>> cLitFalse;
+vector<vector<uint64_t>> cLitTrue;
+vector<vector<uint64_t>> cLitFalse;
 
 vector<LID> lRank;
 
@@ -88,15 +88,15 @@ bool propagateGivesConflict () {
 
         switch (l.state()) {
             case FALSE:
-                for (Clause* c: cLitTrue[l.getId()])
-                    if (clauseConflict(*c))
+                for (uint64_t cid: cLitTrue[l.getId()])
+                    if (clauseConflict(clauses[cid]))
                         return true;
                 break;
             case UNDEF:
                 break;
             case TRUE:
-                for (Clause* c: cLitFalse[l.getId()])
-                    if (clauseConflict(*c))
+                for (uint64_t cid: cLitFalse[l.getId()])
+                    if (clauseConflict(clauses[cid]))
                         return true;
                 break;
         }
@@ -130,20 +130,20 @@ void makeDecision() {
 
 void initClauseIndex() {
 
-    cLitTrue.resize(numVars + 1, vector<Clause*>());
-    cLitFalse.resize(numVars + 1, vector<Clause*>());
+    cLitTrue.resize(numVars + 1, vector<uint64_t>());
+    cLitFalse.resize(numVars + 1, vector<uint64_t>());
 
-    for (Clause& c: clauses)
-        for (Lit l: c)
+    for (uint64_t i = 0; i < clauses.size(); ++i)
+        for (Lit l: clauses[i])
             switch (l.state()) {
 
                 case FALSE:
-                    cLitFalse[l.getId()].push_back(&c);
+                    cLitFalse[l.getId()].push_back(i);
                     break;
                 case UNDEF:
                     break;
                 case TRUE:
-                    cLitTrue[l.getId()].push_back(&c);
+                    cLitTrue[l.getId()].push_back(i);
                     break;
             }
 }
