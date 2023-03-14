@@ -113,8 +113,6 @@ LID nextDecision() {
 
     vector<double> cuVal = vector<double>(value);
 
-    cuVal[0] = -1;
-
     for (const Clause& c: clauses) {
 
         double var = 1;
@@ -182,15 +180,17 @@ void compPriority() {
 
     fill(value.begin(), value.end(), 1);
 
+    value[0] = -1;
+
     auto i = (double)numClauses;
 
     for (const Clause& c: clauses) {
 
         for (const Lit &l: c)
-            value[l.getId()] *= log2(i);
-/*
+            value[l.getId()] += log2(i);
+
         for (const Lit& l: c)
-            value[l.getId()] *= 10;*/
+            value[l.getId()] *= 10;
 
         --i;
     }
