@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 #include <cmath>
+#include <list>
 
 using namespace std;
 
@@ -110,38 +111,35 @@ bool propagateGivesConflict () {
 
 LID nextDecision() {
 
-    uint8_t count = 0;
+    vector<double> cuVal = vector<double>(value);
 
-    LID ret    = 0;
-    double val = 0;
+    cuVal[0] = -1;
 
-    for (const Clause &c: clauses) {
+    for (const Clause& c: clauses) {
 
-        if (any_of(c.begin(), c.end(), [] (const Lit& l) -> bool {
-            return model[l.getId()] == l.state();
-        })) continue;
+        double var = 1;
 
-        for (const Lit &l: c)
-            if (model[l.getId()] == UNDEF && value[l.getId()] > val) {
+        list<LID> boost = list<LID>();
 
-                ret = l.getId();
-                val = value[l.getId()];
+        for (const Lit& l: c)
+            if (model[l.getId()] != UNDEF)
+                var += 10;
+            else
+                boost.push_back(l.getId());
 
-                ++count;
-
-                if (count > 5)
-                    return ret;
-            }
-
-        if (count != 0)
-            continue;
-
-        cout << "Unexpected error" << endl;
-        exit(-3);
+        for (LID id: boost)
+            cuVal[id] *= var;
     }
 
-    if (count != 0)
-        return ret;
+    LID res = 0;
+
+    for (LID id = 1; id <= numVars; ++id)
+        if (model[id] == UNDEF)
+            if (cuVal[res] < cuVal[id])
+                res = id;
+
+    if (res != 0)
+        return res;
 
     //no UNDEF lit found: terminate program
 
@@ -196,18 +194,6 @@ void compPriority() {
 
         --i;
     }
-/*
-    for (const Clause& c: clauses)
-        for (const Lit &l: c)
-            cout << value[l.getId()] << endl;*/
-/*
-    for (LID n = 0; n < (LID)lRank.size(); ++n)
-        lRank[n] = n + 1;
-
-    std::sort(lRank.rbegin(), lRank.rend(), [] (LID i0, LID i1) -> bool {
-
-        return value[i0] < value[i1];
-    });*/
 }
 
 int main(){
