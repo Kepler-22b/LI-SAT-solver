@@ -1,3 +1,5 @@
+/*
+
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
@@ -54,7 +56,6 @@ vector<vector<uint64_t>> cLitTrue;
 vector<vector<uint64_t>> cLitFalse;
 
 vector<double> value;
-//vector<LID> lRank;
 
 uint nextIndex;
 uint level;
@@ -190,24 +191,13 @@ void compPriority() {
 
         for (const Lit &l: c)
             value[l.getId()] *= log2(i);
-/*
+
         for (const Lit& l: c)
-            value[l.getId()] *= 10;*/
+            value[l.getId()] *= 10;
 
         --i;
     }
-/*
-    for (const Clause& c: clauses)
-        for (const Lit &l: c)
-            cout << value[l.getId()] << endl;*/
-/*
-    for (LID n = 0; n < (LID)lRank.size(); ++n)
-        lRank[n] = n + 1;
 
-    std::sort(lRank.rbegin(), lRank.rend(), [] (LID i0, LID i1) -> bool {
-
-        return value[i0] < value[i1];
-    });*/
 }
 
 int main(){
@@ -428,4 +418,4 @@ bool clauseConflict(const Clause& c) {
 
     setLit(lastLitUndef);
     return false;
-}
+}*/
