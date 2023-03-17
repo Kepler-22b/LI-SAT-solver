@@ -1,11 +1,10 @@
-/*
-
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
 #include <vector>
 #include <cstdint>
 #include <cmath>
+#include <list>
 
 using namespace std;
 
@@ -111,38 +110,33 @@ bool propagateGivesConflict () {
 
 LID nextDecision() {
 
-    uint8_t count = 0;
+    vector<double> cuVal = vector<double>(value);
 
-    LID ret    = 0;
-    double val = 0;
+    for (const Clause& c: clauses) {
 
-    for (const Clause &c: clauses) {
+        double var = 1;
 
-        if (any_of(c.begin(), c.end(), [] (const Lit& l) -> bool {
-            return model[l.getId()] == l.state();
-        })) continue;
+        list<LID> boost = list<LID>();
 
-        for (const Lit &l: c)
-            if (model[l.getId()] == UNDEF && value[l.getId()] > val) {
+        for (const Lit& l: c)
+            if (model[l.getId()] != UNDEF)
+                var += 10;
+            else
+                boost.push_back(l.getId());
 
-                ret = l.getId();
-                val = value[l.getId()];
-
-                ++count;
-
-                if (count > 5)
-                    return ret;
-            }
-
-        if (count != 0)
-            continue;
-
-        cout << "Unexpected error" << endl;
-        exit(-3);
+        for (LID id: boost)
+            cuVal[id] *= var;
     }
 
-    if (count != 0)
-        return ret;
+    LID res = 0;
+
+    for (LID id = 1; id <= numVars; ++id)
+        if (model[id] == UNDEF)
+            if (cuVal[res] < cuVal[id])
+                res = id;
+
+    if (res != 0)
+        return res;
 
     //no UNDEF lit found: terminate program
 
@@ -185,19 +179,20 @@ void compPriority() {
 
     fill(value.begin(), value.end(), 1);
 
+    value[0] = -1;
+
     auto i = (double)numClauses;
 
     for (const Clause& c: clauses) {
 
         for (const Lit &l: c)
-            value[l.getId()] *= log2(i);
+            value[l.getId()] += log2(i);
 
         for (const Lit& l: c)
             value[l.getId()] *= 10;
 
         --i;
     }
-
 }
 
 int main(){
@@ -418,4 +413,4 @@ bool clauseConflict(const Clause& c) {
 
     setLit(lastLitUndef);
     return false;
-}*/
+}
